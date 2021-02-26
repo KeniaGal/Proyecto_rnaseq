@@ -2,14 +2,113 @@
 title: "Proyecto"
 output: html_document
 ---
-	
+SRP132992
+## Obtencion de la lobreria y los proyectos disponibles
 ```{r}
 library("recount3")
 projects <- available_projects()
-informacion <- subset(
-    projects,
-    project == "SRP165875" & project_type == "data_sources"
-)
 ```
+
+## Obtencion del proyecto SRP132992
+
+Informacion de 50 muestras del articulo **"Epigenetic dysregulation of enhancers in neurons is associated with Alzheimer's disease pathology and cognitive symptoms (RNA-Seq)"**
+```{r}
+#Descarga del proyecto
+
+proj_info <- subset(
+    projects,
+    project == "SRP132992" & project_type == "data_sources"
+)
+
+rse <- create_rse(proj_info)
+```
+#Exploracion de los datos obtenidos
+
+```{r}
+print("rse")
+rse
+assay(rse, "counts") <- compute_read_counts(rse)
+print("Atributos")
+rse$sra.sample_attributes[1:3]
+```
+	Se analizan 63856 genes de las 50 muestras y los atributos de las muestras parecen ser los mismos.
 	
 	
+```{r}
+rse <- expand_sra_attributes(rse)
+colData(rse)[
+    ,
+    grepl("^sra_attribute", colnames(colData(rse)))
+]
+```
+
+Se realiza un reasignacion a los atributos que lo necesiten
+```{r}
+rse$sra_attribute.age <- as.numeric(rse$sra_attribute.age)
+rse$sra_attribute.braak_stage<- as.numeric(rse$sra_attribute.braak_stage)
+rse$sra_attribute.pmi<-as.numeric(rse$sra_attribute.pmi)
+rse$sra_attribute.Sex<- factor(rse$sra_attribute.Sex)
+```
+```{r}
+summary(as.data.frame(colData(rse)[
+    ,
+    grepl("^sra_attribute.[age|braak_stage|brain_bank|pmi|Sex]", colnames(colData(rse)))
+]))
+```
+Las variables se creearan a partir de la edad media (88.00)
+```{r}
+rse$pre_media <- factor(ifelse(rse$sra_attribute.age <88, "pre_media", "post_media"))
+table(rse$pre_media)
+```
+
+### Control de calidad
+```{r}
+rse$assigned_gene_prop <- rse$recount_qc.gene_fc_count_all.assigned / rse$recount_qc.gene_fc_count_all.total
+summary(rse$assigned_gene_prop)
+
+```
+
+```{r}
+rse_unfiltered <- rse
+with(colData(rse), tapply(assigned_gene_prop, pre_media , summary))
+
+```
+
+Eliminamos las muestras de mala calidad
+```{r}
+hist(rse$assigned_gene_prop)
+
+```
+Se quitaran los más bajos que el primer quantil (0.33)
+```{r}
+table(rse$assigned_gene_prop < 0.33)
+```
+
+```{r}
+rse <- rse[, rse$assigned_gene_prop > 0.3]
+
+```
+ 
+ ### Niveles de expresión en las muestras
+```{r}
+gene_means <- rowMeans(assay(rse, "counts"))
+summary(gene_means)
+```
+Se quitaran los más bajos del primer quantil
+```{r}
+rse <- rse[gene_means > 0.1, ]
+
+```
+Dimensiones finales:
+```{r}
+dim(rse)
+
+```
+EL numero de muestras no se redujo, pero el numero de genes paso de  63856 a 46181.
+
+## Normalización de los datos
+
+```{r}
+
+```
+
