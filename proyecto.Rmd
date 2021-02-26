@@ -218,7 +218,7 @@ Tampoco por el PMI.
 
 :(
 
-
+## Variación del modelo
 A continuacion se repetiran los pasos anteriores incluyendo otra variable en el  modelo
 ```{r}
 mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + sra_attribute.braak_stage + assigned_gene_prop,
@@ -267,6 +267,11 @@ pheatmap(
 ```{r}
 plotMDS(vGene$E, labels = df$Braak, col = col.group)
 ```
-Los resultados nos indica que el braak_stage no es lo que esta separando los resulatdos.
+Los resultados nos indica que el braak_stage no es lo que esta separando los resultados.
+
+
+
+
+La separacion de edad no ser suficiente para representar un cambio en la expresión de los genes aún si estos se presentan como expresados diferencialmente, esta separeción sería más adecuada con un grupo más joven o de la misma edad que no presenten la enfermedad.
 
 
