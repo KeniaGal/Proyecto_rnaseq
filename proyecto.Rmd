@@ -109,6 +109,52 @@ EL numero de muestras no se redujo, pero el numero de genes paso de  63856 a 461
 ## Normalización de los datos
 
 ```{r}
+library("edgeR") # BiocManager::install("edgeR", update = FALSE)
+dge <- DGEList(
+    counts = assay(rse, "counts"),
+    genes = rowData(rse)
+)
+dge <- calcNormFactors(dge)
 
 ```
+# Expresion diferencial
+
+```{r}
+library("ggplot2")
+ggplot(as.data.frame(colData(rse)), aes(y = assigned_gene_prop, x = pre_media)) +
+    geom_boxplot() +
+    theme_bw(base_size = 20) +
+    ylab("Assigned Gene Prop") +
+    xlab("Age Group")
+```
+## Modelo
+```{r}
+mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assigned_gene_prop,
+    data = colData(rse)
+)
+colnames(mod)
+```
+```{r}
+library("limma")
+vGene <- voom(dge, mod, plot = TRUE)
+```
+
+
+```{r}
+eb_results <- eBayes(lmFit(vGene))
+
+de_results <- topTable(
+    eb_results,
+    coef = 2,
+    number = nrow(rse),
+    sort.by = "none"
+)
+dim(de_results)
+```
+```{r}
+table(de_results$adj.P.Val < 0.05)
+```
+
+
+
 
