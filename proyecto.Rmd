@@ -55,7 +55,7 @@ summary(as.data.frame(colData(rse)[
     grepl("^sra_attribute.[age|braak_stage|brain_bank|pmi|Sex]", colnames(colData(rse)))
 ]))
 ```
-Las variables se creearan a partir de la edad media (88.00)
+Las variables se creearan a partir de la edad de la mediana (88.00)
 ```{r}
 rse$pre_media <- factor(ifelse(rse$sra_attribute.age <88, "pre_media", "post_media"))
 table(rse$pre_media)
@@ -74,11 +74,8 @@ with(colData(rse), tapply(assigned_gene_prop, pre_media , summary))
 
 ```
 
-Eliminamos las muestras de mala calidad
-```{r}
-hist(rse$assigned_gene_prop)
+###Eliminamos las muestras de mala calidad
 
-```
 Se quitaran los más bajos que el primer quantil (0.33)
 ```{r}
 table(rse$assigned_gene_prop < 0.33)
@@ -151,10 +148,125 @@ de_results <- topTable(
 )
 dim(de_results)
 ```
+
 ```{r}
 table(de_results$adj.P.Val < 0.05)
+indices<-de_results$adj.P.Val < 0.05
+indices<-which(indices,arr.ind = TRUE)
+```
+Con base en nuestro modelo los siguientes genes tienen una expresión diferencial.
+```{r}
+de_results$gene_name[indices]
 ```
 
+En la siguiente grafica los 13 genes con expresion diferencial estan resaltados
+```{r}
+volcanoplot(eb_results, coef = 2, highlight = 13, names = de_results$gene_name)
 
+```
+
+# Visualización
+```{r}
+exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 13, ]
+df <- as.data.frame(colData(rse)[, c("pre_media", "sra_attribute.pmi", "sra_attribute.Sex")])
+colnames(df) <- c("AgeGroup", "pmi", "Sex")
+
+rownames(exprs_heatmap) <- rowRanges(rse)$gene_name[
+    match(rownames(exprs_heatmap), rowRanges(rse)$gene_id)
+]
+
+library("pheatmap")
+pheatmap(
+    exprs_heatmap,
+    cluster_rows = TRUE,
+    cluster_cols = TRUE,
+    show_rownames = TRUE,
+    show_colnames = FALSE,
+    annotation_col = df
+)
+```
+En el heatmap no parecen haber separaciones claras entre los grupos segun su edad, pmi o sexo, a pesar de que se trata de los genes con expresión diferencial
+
+## Otras graficas
+```{r}
+## Para colores
+library("RColorBrewer")
+
+## Conviertiendo los grupos de edad a colores
+col.group <- df$AgeGroup
+levels(col.group) <- brewer.pal(nlevels(col.group), "Set1")
+```
+```{r}
+col.group <- as.character(col.group)
+
+## MDS por grupos de edad
+plotMDS(vGene$E, labels = df$AgeGroup, col = col.group)
+```
+La sepación que se observa no se basa en grupos de edad, por lo que debe haber otro factor afectandolo.
+
+
+```{r}
+plotMDS(vGene$E, labels = df$Sex, col = col.group)
+```
+Tampoco estan siendo separados por el sexo
+
+```{r}
+plotMDS(vGene$E, labels = df$pmi, col = col.group)
+```
+Tampoco por el PMI.
+
+
+:(
+
+
+A continuacion se repetiran los pasos anteriores incluyendo otra variable en el  modelo
+```{r}
+mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + sra_attribute.braak_stage + assigned_gene_prop,
+    data = colData(rse)
+)
+colnames(mod)
+
+eb_results <- eBayes(lmFit(vGene))
+
+de_results <- topTable(
+    eb_results,
+    coef = 2,
+    number = nrow(rse),
+    sort.by = "none"
+)
+table(de_results$adj.P.Val < 0.05)
+indices<-de_results$adj.P.Val < 0.05
+indices<-which(indices,arr.ind = TRUE)
+```
+```{r}
+de_results$gene_name[indices]
+```
+```{r}
+volcanoplot(eb_results, coef = 2, highlight = 13, names = de_results$gene_name)
+```
+```{r}
+exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 13, ]
+df <- as.data.frame(colData(rse)[, c("pre_media", "sra_attribute.pmi","sra_attribute.braak_stage", "sra_attribute.Sex")])
+colnames(df) <- c("AgeGroup", "pmi","Braak", "Sex")
+
+rownames(exprs_heatmap) <- rowRanges(rse)$gene_name[
+    match(rownames(exprs_heatmap), rowRanges(rse)$gene_id)
+]
+
+library("pheatmap")
+pheatmap(
+    exprs_heatmap,
+    cluster_rows = TRUE,
+    cluster_cols = TRUE,
+    show_rownames = TRUE,
+    show_colnames = FALSE,
+    annotation_col = df
+)
+```
+
+```{r}
+plotMDS(vGene$E, labels = df$Braak, col = col.group)
+```
+Los resultados nos indica que el braak_stage no es lo que esta separando los resulatdos.
 
 
