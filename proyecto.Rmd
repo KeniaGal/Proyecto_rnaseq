@@ -218,7 +218,7 @@ Tampoco por el PMI.
 
 :(
 
-## Variación del modelo
+## Variación del modelol
 A continuacion se repetiran los pasos anteriores incluyendo otra variable en el  modelo
 ```{r}
 mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + sra_attribute.braak_stage + assigned_gene_prop,
@@ -271,7 +271,7 @@ Los resultados nos indica que el braak_stage no es lo que esta separando los res
 
 
 
+## Separación de grupos en base al Braak 
 
-La separacion de edad no ser suficiente para representar un cambio en la expresión de los genes aún si estos se presentan como expresados diferencialmente, esta separeción sería más adecuada con un grupo más joven o de la misma edad que no presenten la enfermedad.
 
 
