@@ -2,4 +2,14 @@
 title: "Proyecto"
 output: html_document
 ---
-aaaaaaa
+	
+```{r}
+library("recount3")
+projects <- available_projects()
+informacion <- subset(
+    projects,
+    project == "SRP165875" & project_type == "data_sources"
+)
+```
+	
+	
