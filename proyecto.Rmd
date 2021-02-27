@@ -45,10 +45,10 @@ colData(rse)[
 Se realiza un reasignacion a los atributos que lo necesiten
 ```{r}
 rse$sra_attribute.age <- as.numeric(rse$sra_attribute.age)
-rse$sra_attribute.braak_stage<- as.numeric(rse$sra_attribute.braak_stage)
 rse$sra_attribute.pmi<-as.numeric(rse$sra_attribute.pmi)
 rse$sra_attribute.Sex<- factor(rse$sra_attribute.Sex)
 ```
+
 ```{r}
 summary(as.data.frame(colData(rse)[
     ,
@@ -96,6 +96,11 @@ Se quitaran los más bajos del primer quantil
 rse <- rse[gene_means > 0.1, ]
 
 ```
+
+```{r}
+filtered_rse<-rse
+```
+
 Dimensiones finales:
 ```{r}
 dim(rse)
@@ -131,6 +136,33 @@ mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assign
 )
 colnames(mod)
 ```
+#Evalucion del modelo
+if (interactive()) {
+      ## Tenemos que eliminar columnas que tienen NAs.
+      ExploreModelMatrix::ExploreModelMatrix(
+          colData(rse)[, c(
+              "pre_media", "sra_attribute.pmi", "sra_attribute.Sex", "assigned_gene_prop"
+          )],
+         ~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assigned_gene_prop
+     )
+ }
+ 
+```{r}
+# if (interactive()) {
+#       ## Tenemos que eliminar columnas que tienen NAs.
+#       ExploreModelMatrix::ExploreModelMatrix(
+#           colData(rse)[, c(
+#               "pre_media", "sra_attribute.pmi", "sra_attribute.Sex", "assigned_gene_prop"
+#           )],
+#          ~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assigned_gene_prop
+#      )
+#  }
+```
+ 
+
+Las lineas anteriores su utilizaron para comprobar que el modelo no tuviera variables dependientes.
+
+
 ```{r}
 library("limma")
 vGene <- voom(dge, mod, plot = TRUE)
@@ -157,6 +189,7 @@ indices<-which(indices,arr.ind = TRUE)
 Con base en nuestro modelo los siguientes genes tienen una expresión diferencial.
 ```{r}
 de_results$gene_name[indices]
+NomEdad<-de_results$gene_name[indices]
 ```
 
 En la siguiente grafica los 13 genes con expresion diferencial estan resaltados
@@ -218,13 +251,75 @@ Tampoco por el PMI.
 
 :(
 
-## Variación del modelol
-A continuacion se repetiran los pasos anteriores incluyendo otra variable en el  modelo
+## Separación de grupos en base al Braak 
 ```{r}
-mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + sra_attribute.braak_stage + assigned_gene_prop,
+col.group <- as.character(col.group)
+
+## MDS por grupos de edad
+plotMDS(vGene$E, labels = df$Braak, col = col.group)
+
+```
+Los resultados nos indica que el braak_stage no es lo que esta separando los resultados.
+
+
+# Nuevas variables
+
+Esta vez los grupos que se trabajaran se separaran con el braak_stage.
+
+Para esto es necesario quitar los NAs que braak_stage contiene
+```{r}
+#Se regresa al objeto filtrado, pero que no tiene los cambios del otro modelo
+rse<-rse_unfiltered
+NAs<-is.na(rse$sra_attribute.braak_stage)
+NAs<-which(NAs,arr.ind=FALSE)
+NAs
+
+```
+
+
+Los paso anteriores se repetiran.
+```{r}
+rse$pre_media <- factor(ifelse(rse$sra_attribute.braak_stage <3, "pre_media", "post_media"))
+table(rse$pre_media)
+```
+
+```{r}
+dge <- DGEList(
+    counts = assay(rse, "counts"),
+    genes = rowData(rse)
+)
+dge <- calcNormFactors(dge)
+
+ggplot(as.data.frame(colData(rse)), aes(y = assigned_gene_prop, x = pre_media)) +
+    geom_boxplot() +
+    theme_bw(base_size = 20) +
+    ylab("Assigned Gene Prop") +
+    xlab("Braak Group")
+```
+
+```{r}
+
+mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + sra_attribute.age,
     data = colData(rse)
 )
 colnames(mod)
+# if (interactive()) {
+#       ## Tenemos que eliminar columnas que tienen NAs.
+#       ExploreModelMatrix::ExploreModelMatrix(
+#           colData(rse)[, c(
+#               "pre_media", "sra_attribute.pmi","sra_attribute.age", "sra_attribute.Sex", "assigned_gene_prop"
+#           )],
+#          ~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assigned_gene_prop + sra_attribute.age
+#      )
+#  }
+```
+
+```{r}
+vGene <- voom(dge, mod, plot = TRUE)
+
+```
+
+```{r}
 
 eb_results <- eBayes(lmFit(vGene))
 
@@ -234,25 +329,32 @@ de_results <- topTable(
     number = nrow(rse),
     sort.by = "none"
 )
+dim(de_results)
+```
+
+```{r}
 table(de_results$adj.P.Val < 0.05)
 indices<-de_results$adj.P.Val < 0.05
 indices<-which(indices,arr.ind = TRUE)
 ```
+
 ```{r}
 de_results$gene_name[indices]
+NomBraak<-de_results$gene_name[indices]
 ```
+
 ```{r}
 volcanoplot(eb_results, coef = 2, highlight = 13, names = de_results$gene_name)
+
 ```
+
 ```{r}
 exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 13, ]
-df <- as.data.frame(colData(rse)[, c("pre_media", "sra_attribute.pmi","sra_attribute.braak_stage", "sra_attribute.Sex")])
-colnames(df) <- c("AgeGroup", "pmi","Braak", "Sex")
-
+df <- as.data.frame(colData(rse)[, c("pre_media", "sra_attribute.pmi", "sra_attribute.Sex","sra_attribute.age")])
+colnames(df) <- c("BraakGroup", "pmi", "Sex","Age")
 rownames(exprs_heatmap) <- rowRanges(rse)$gene_name[
     match(rownames(exprs_heatmap), rowRanges(rse)$gene_id)
 ]
-
 library("pheatmap")
 pheatmap(
     exprs_heatmap,
@@ -265,13 +367,17 @@ pheatmap(
 ```
 
 ```{r}
-plotMDS(vGene$E, labels = df$Braak, col = col.group)
+col.group <- as.character(col.group)
+
+## MDS por grupos de edad
+plotMDS(vGene$E, labels = df$pre_media, col = col.group)
 ```
-Los resultados nos indica que el braak_stage no es lo que esta separando los resultados.
+
+Nuevamente la separacion de nuestro grupos no es clara.
 
 
-
-## Separación de grupos en base al Braak 
-
-
+# Genes expresados diferencialmente con ambos modelos
+```{r}
+intersect(NomBraak,NomEdad)
+```
 
