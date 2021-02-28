@@ -2,26 +2,29 @@
 title: "Proyecto"
 output: html_document
 ---
-SRP132992
-## Obtencion de la lobreria y los proyectos disponibles
+
+## Obtencion de la libreria y los proyectos disponibles
 ```{r}
 library("recount3")
-projects <- available_projects()
+projects<-available_projects()
 ```
 
-## Obtencion del proyecto SRP132992
 
-Informacion de 50 muestras del articulo **"Epigenetic dysregulation of enhancers in neurons is associated with Alzheimer's disease pathology and cognitive symptoms (RNA-Seq)"**
+## Obtencion del proyecto 	SRP139932
+
+Informacion de muestras del articulo ****
 ```{r}
 #Descarga del proyecto
-
 proj_info <- subset(
     projects,
-    project == "SRP132992" & project_type == "data_sources"
+    project == "SRP156776" & project_type == "data_sources"
 )
-
-rse <- create_rse(proj_info)
 ```
+
+```{r}
+rse<-create_rse(proj_info)
+```
+
 #Exploracion de los datos obtenidos
 
 ```{r}
@@ -31,7 +34,7 @@ assay(rse, "counts") <- compute_read_counts(rse)
 print("Atributos")
 rse$sra.sample_attributes[1:3]
 ```
-	Se analizan 63856 genes de las 50 muestras y los atributos de las muestras parecen ser los mismos.
+	Se analizan 63856 genes de las 24 muestras y los atributos de las muestras parecen ser los mismos.
 	
 	
 ```{r}
@@ -44,21 +47,19 @@ colData(rse)[
 
 Se realiza un reasignacion a los atributos que lo necesiten
 ```{r}
-rse$sra_attribute.age <- as.numeric(rse$sra_attribute.age)
-rse$sra_attribute.pmi<-as.numeric(rse$sra_attribute.pmi)
-rse$sra_attribute.Sex<- factor(rse$sra_attribute.Sex)
+rse$sra_attribute.disease<- factor(rse$sra_attribute.disease)
 ```
 
 ```{r}
 summary(as.data.frame(colData(rse)[
     ,
-    grepl("^sra_attribute.[age|braak_stage|brain_bank|pmi|Sex]", colnames(colData(rse)))
+    grepl("^sra_attribute.[disease]", colnames(colData(rse)))
 ]))
 ```
-Las variables se creearan a partir de la edad de la mediana (88.00)
+Las variables se creearan en base a la prescencia de la enfermedad 
 ```{r}
-rse$pre_media <- factor(ifelse(rse$sra_attribute.age <88, "pre_media", "post_media"))
-table(rse$pre_media)
+rse$esquizo <- factor(ifelse(rse$sra_attribute.disease == "schizophrenia", "esquizo", "control"))
+table(rse$esquizo)
 ```
 
 ### Control de calidad
@@ -78,7 +79,7 @@ with(colData(rse), tapply(assigned_gene_prop, pre_media , summary))
 
 Se quitaran los más bajos que el primer quantil (0.33)
 ```{r}
-table(rse$assigned_gene_prop < 0.33)
+table(rse$assigned_gene_prop < 0.76)
 ```
 
 ```{r}
@@ -86,14 +87,14 @@ rse <- rse[, rse$assigned_gene_prop > 0.3]
 
 ```
  
- ### Niveles de expresión en las muestras
+###Niveles de expresión en las muestras
 ```{r}
 gene_means <- rowMeans(assay(rse, "counts"))
 summary(gene_means)
 ```
-Se quitaran los más bajos del primer quantil
+Se quitaran los que esten en 0.0
 ```{r}
-rse <- rse[gene_means > 0.1, ]
+rse <- rse[gene_means > 0.0, ]
 
 ```
 
@@ -106,7 +107,7 @@ Dimensiones finales:
 dim(rse)
 
 ```
-EL numero de muestras no se redujo, pero el numero de genes paso de  63856 a 46181.
+EL numero de muestras no se redujo, pero el numero de genes paso de  63856 a 42623.
 
 ## Normalización de los datos
 
@@ -123,38 +124,44 @@ dge <- calcNormFactors(dge)
 
 ```{r}
 library("ggplot2")
-ggplot(as.data.frame(colData(rse)), aes(y = assigned_gene_prop, x = pre_media)) +
+ggplot(as.data.frame(colData(rse)), aes(y = assigned_gene_prop, x =esquizo)) +
     geom_boxplot() +
     theme_bw(base_size = 20) +
     ylab("Assigned Gene Prop") +
     xlab("Age Group")
 ```
+Acerca de las otras variables
+```{r}
+unique(rse$sra_attribute.tissue)
+unique(rse$sra_attribute.source_name)
+```
+Las otras dos variables solo tienen un grupo, por lo que involucrarlas en el modelo no será necesario
+
+
 ## Modelo
 ```{r}
-mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assigned_gene_prop,
+mod <- model.matrix(~ esquizo + assigned_gene_prop,
     data = colData(rse)
 )
 colnames(mod)
 ```
 #Evalucion del modelo
 if (interactive()) {
-      ## Tenemos que eliminar columnas que tienen NAs.
       ExploreModelMatrix::ExploreModelMatrix(
           colData(rse)[, c(
-              "pre_media", "sra_attribute.pmi", "sra_attribute.Sex", "assigned_gene_prop"
+              "esquizo", "assigned_gene_prop"
           )],
-         ~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assigned_gene_prop
+         ~ esquizo + assigned_gene_prop
      )
  }
  
 ```{r}
 # if (interactive()) {
-#       ## Tenemos que eliminar columnas que tienen NAs.
 #       ExploreModelMatrix::ExploreModelMatrix(
 #           colData(rse)[, c(
-#               "pre_media", "sra_attribute.pmi", "sra_attribute.Sex", "assigned_gene_prop"
+#               "esquizo", "assigned_gene_prop"
 #           )],
-#          ~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assigned_gene_prop
+#          ~ esquizo + assigned_gene_prop
 #      )
 #  }
 ```
@@ -163,6 +170,7 @@ if (interactive()) {
 Las lineas anteriores su utilizaron para comprobar que el modelo no tuviera variables dependientes.
 
 
+#Expresión diferencial
 ```{r}
 library("limma")
 vGene <- voom(dge, mod, plot = TRUE)
@@ -192,17 +200,17 @@ de_results$gene_name[indices]
 NomEdad<-de_results$gene_name[indices]
 ```
 
-En la siguiente grafica los 13 genes con expresion diferencial estan resaltados
+En la siguiente grafica los 7 genes con expresion diferencial estan resaltados
 ```{r}
-volcanoplot(eb_results, coef = 2, highlight = 13, names = de_results$gene_name)
+volcanoplot(eb_results, coef = 2, highlight = 7, names = de_results$gene_name)
 
 ```
 
 # Visualización
 ```{r}
 exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 13, ]
-df <- as.data.frame(colData(rse)[, c("pre_media", "sra_attribute.pmi", "sra_attribute.Sex")])
-colnames(df) <- c("AgeGroup", "pmi", "Sex")
+df <- as.data.frame(colData(rse)[, c("esquizo","assigned_gene_prop")])
+colnames(df) <- c("Grupo","calidad")
 
 rownames(exprs_heatmap) <- rowRanges(rse)$gene_name[
     match(rownames(exprs_heatmap), rowRanges(rse)$gene_id)
@@ -218,166 +226,25 @@ pheatmap(
     annotation_col = df
 )
 ```
-En el heatmap no parecen haber separaciones claras entre los grupos segun su edad, pmi o sexo, a pesar de que se trata de los genes con expresión diferencial
+En el heatmap los grupos de separan de manera clara respecto a la prescencia o ausencia de la enfermedad, y esto no tiene relacion con la calidad de las muestras, pues esta varia dentro de los grupos.
 
-## Otras graficas
+## Multidimentional scaling
 ```{r}
 ## Para colores
 library("RColorBrewer")
 
-## Conviertiendo los grupos de edad a colores
-col.group <- df$AgeGroup
+## Conviertiendo los grupos a colores
+col.group <- df$Grupo
 levels(col.group) <- brewer.pal(nlevels(col.group), "Set1")
 ```
 ```{r}
 col.group <- as.character(col.group)
 
-## MDS por grupos de edad
-plotMDS(vGene$E, labels = df$AgeGroup, col = col.group)
+## MDS por grupos
+plotMDS(vGene$E, labels = df$Grupo, col = col.group)
 ```
-La sepación que se observa no se basa en grupos de edad, por lo que debe haber otro factor afectandolo.
+Recordando que el escalado multidimensional permite uan representacion visual de los datos con base en su similitud.
 
+En este caso los grupos no tiene una separación clara a pesar de que el heatmap si la marca. 
 
-```{r}
-plotMDS(vGene$E, labels = df$Sex, col = col.group)
-```
-Tampoco estan siendo separados por el sexo
-
-```{r}
-plotMDS(vGene$E, labels = df$pmi, col = col.group)
-```
-Tampoco por el PMI.
-
-
-:(
-
-## Separación de grupos en base al Braak 
-```{r}
-col.group <- as.character(col.group)
-
-## MDS por grupos de edad
-plotMDS(vGene$E, labels = df$Braak, col = col.group)
-
-```
-Los resultados nos indica que el braak_stage no es lo que esta separando los resultados.
-
-
-# Nuevas variables
-
-Esta vez los grupos que se trabajaran se separaran con el braak_stage.
-
-Para esto es necesario quitar los NAs que braak_stage contiene
-```{r}
-#Se regresa al objeto filtrado, pero que no tiene los cambios del otro modelo
-rse<-rse_unfiltered
-NAs<-is.na(rse$sra_attribute.braak_stage)
-NAs<-which(NAs,arr.ind=FALSE)
-NAs
-
-```
-
-
-Los paso anteriores se repetiran.
-```{r}
-rse$pre_media <- factor(ifelse(rse$sra_attribute.braak_stage <3, "pre_media", "post_media"))
-table(rse$pre_media)
-```
-
-```{r}
-dge <- DGEList(
-    counts = assay(rse, "counts"),
-    genes = rowData(rse)
-)
-dge <- calcNormFactors(dge)
-
-ggplot(as.data.frame(colData(rse)), aes(y = assigned_gene_prop, x = pre_media)) +
-    geom_boxplot() +
-    theme_bw(base_size = 20) +
-    ylab("Assigned Gene Prop") +
-    xlab("Braak Group")
-```
-
-```{r}
-
-mod <- model.matrix(~ pre_media + sra_attribute.pmi + sra_attribute.Sex + sra_attribute.age,
-    data = colData(rse)
-)
-colnames(mod)
-# if (interactive()) {
-#       ## Tenemos que eliminar columnas que tienen NAs.
-#       ExploreModelMatrix::ExploreModelMatrix(
-#           colData(rse)[, c(
-#               "pre_media", "sra_attribute.pmi","sra_attribute.age", "sra_attribute.Sex", "assigned_gene_prop"
-#           )],
-#          ~ pre_media + sra_attribute.pmi + sra_attribute.Sex + assigned_gene_prop + sra_attribute.age
-#      )
-#  }
-```
-
-```{r}
-vGene <- voom(dge, mod, plot = TRUE)
-
-```
-
-```{r}
-
-eb_results <- eBayes(lmFit(vGene))
-
-de_results <- topTable(
-    eb_results,
-    coef = 2,
-    number = nrow(rse),
-    sort.by = "none"
-)
-dim(de_results)
-```
-
-```{r}
-table(de_results$adj.P.Val < 0.05)
-indices<-de_results$adj.P.Val < 0.05
-indices<-which(indices,arr.ind = TRUE)
-```
-
-```{r}
-de_results$gene_name[indices]
-NomBraak<-de_results$gene_name[indices]
-```
-
-```{r}
-volcanoplot(eb_results, coef = 2, highlight = 13, names = de_results$gene_name)
-
-```
-
-```{r}
-exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 13, ]
-df <- as.data.frame(colData(rse)[, c("pre_media", "sra_attribute.pmi", "sra_attribute.Sex","sra_attribute.age")])
-colnames(df) <- c("BraakGroup", "pmi", "Sex","Age")
-rownames(exprs_heatmap) <- rowRanges(rse)$gene_name[
-    match(rownames(exprs_heatmap), rowRanges(rse)$gene_id)
-]
-library("pheatmap")
-pheatmap(
-    exprs_heatmap,
-    cluster_rows = TRUE,
-    cluster_cols = TRUE,
-    show_rownames = TRUE,
-    show_colnames = FALSE,
-    annotation_col = df
-)
-```
-
-```{r}
-col.group <- as.character(col.group)
-
-## MDS por grupos de edad
-plotMDS(vGene$E, labels = df$pre_media, col = col.group)
-```
-
-Nuevamente la separacion de nuestro grupos no es clara.
-
-
-# Genes expresados diferencialmente con ambos modelos
-```{r}
-intersect(NomBraak,NomEdad)
-```
 
