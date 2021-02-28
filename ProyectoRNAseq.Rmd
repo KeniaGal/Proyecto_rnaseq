@@ -13,6 +13,10 @@ projects<-available_projects()
 
 Informacion de muestras del estudio **Transcriptome profiles of POM121-knockout prostate cancer cell lines**
 
+POM121 es una proteína transmembranal de un solo paso por la membrana, que colabora con la inserción del complejo de poro nuclear (NPC) en la envoltura nuclear mediante su dominio N-terminal, ayudando con la fusión de las membranas en la interfase junto con otras proteínas nucleares, esto logrado al reducir el espacio intermembranal de la envoltura nuclear. Además que ayuda con la formación de esta envoltura, el transporte nucleocitoplasmático y la apoptosis celular.
+
+se ha encontrado a POM121 sobreexpresada en muestras de varios tipos de cancer, incluyendo el de prostata.
+
 ```{r}
 #Descarga del proyecto
 proj_info <- subset(
@@ -267,8 +271,48 @@ NomGenes[1:5]
 ```
 Con iSEE se mantuvo el patron de separacion principalmente por las lineas celulares y despues por el knockout de POM121
 
+- MTCO2P12
+Se trata de pseudo-gen tambien conocido como COX2, es parte de subunidad oxidasa II del citocromo c.
+- LINC01128
+Una región que no codifica para proteínas que se expresa en diversos tejidos del cuerpo
+- NOC2L
+Es un inhibidor de la histona acetiltransferasa (INHAT), que se encarga de la regulación transcripcional
+- ISG15
+Una proteína similar a ubiquitina que ha sido asociada a señalización direccionamiento a filamentos intermedios y actividad antiviral
+
 
 ## Conclusiones
 
+El knockout de POM121 conlleva a una expresión diferencial entre las muestras, siendo que esta se conserva aún en diferentes lineas celulares, pero considero que para poder llegar a resultados más precisos se necesita que las diferencias de expresión de genes que ya existen entre las lineas, aún sin la afectacion de POM121, sean descartadas, de esa forma los genes que sean resaltados serán los que verdaderamente esten siendo influenciados por POM121.
 
+
+
+
+### Referencias
+
+- MTCO2P12 MT-CO2 pseudogene 12 [ Homo sapiens (human) ]; https://www.ncbi.nlm.nih.gov/gene/?term=MTCO2P12
+- LINC01128 long intergenic non-protein coding RNA 1128 [ Homo sapiens (human)]; https://www.ncbi.nlm.nih.gov/gene/643837 
+- NOC2L NOC2 like nucleolar associated transcriptional repressor [ Homo sapiens (human) ];https://www.ncbi.nlm.nih.gov/gene/26155 
+- ISG15 ISG15 ubiquitin like modifier [ Homo sapiens (human) ]; https://www.ncbi.nlm.nih.gov/gene/9636
+- Talamas JA, Hetzer MW. POM121 and Sun1 play a role in early steps of interphase NPC assembly. J Cell Biol. 2011 Jul 11;194(1):27-37. doi: 10.1083/jcb.201012154. Epub 2011 Jul 4. PMID: 21727197; PMCID: PMC3135402.
+- Rodriguez-Bravo V, Pippa R, Song WM, Carceles-Cordon M, Dominguez-Andres A, Fujiwara N, Woo J, Koh AP, Ertel A, Lokareddy RK, Cuesta-Dominguez A, Kim RS, Rodriguez-Fernandez I, Li P, Gordon R, Hirschfield H, Prats JM, Reddy EP, Fatatis A, Petrylak DP, Gomella L, Kelly WK, Lowe SW, Knudsen KE, Galsky MD, Cingolani G, Lujambio A, Hoshida Y, Domingo-Domenech J. Nuclear Pores Promote Lethal Prostate Cancer by Increasing POM121-Driven E2F1, MYC, and AR Nuclear Import. Cell. 2018 Aug 23;174(5):1200-1215.e20. doi: 10.1016/j.cell.2018.07.015. Epub 2018 Aug 9. PMID: 30100187; PMCID: PMC6150493.
+- Transcriptome profiles of POM121-knockout prostate cancer cell lines; https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE103637
+
+
+## Heatmap de los 100 primeros genes
+```{r}
+exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 100, ]
+df <- as.data.frame(colData(rse)[, c("POM121","assigned_gene_prop","sra_attribute.cell_line")])
+colnames(df) <- c("Grupo","Calidad","Linea_celular")
+
+library("pheatmap")
+pheatmap(
+    exprs_heatmap,
+    cluster_rows = TRUE,
+    cluster_cols = TRUE,
+    show_rownames = FALSE,
+    show_colnames = FALSE,
+    annotation_col = df
+)
+```
 
