@@ -1,0 +1,262 @@
+---
+title: "Proyecto_RNAseq"
+output: html_document
+---
+## Obtencion de la libreria y los proyectos disponibles
+```{r}
+library("recount3")
+projects<-available_projects()
+```
+
+
+## Obtencion del proyecto 	SRP117164
+
+Informacion de muestras del estudio **Transcriptome profiles of POM121-knockout prostate cancer cell lines**
+
+```{r}
+#Descarga del proyecto
+proj_info <- subset(
+    projects,
+    project == "SRP117164" & project_type == "data_sources"
+)
+```
+
+```{r}
+rse<-create_rse(proj_info)
+```
+
+# Exploracion de los datos obtenidos
+
+```{r}
+rse
+assay(rse, "counts") <- compute_read_counts(rse)
+print("Atributos")
+rse$sra.sample_attributes[1:3]
+```
+	Se analizan 63856 genes de las 24 muestras y los atributos de las muestras parecen ser los mismos.
+	
+	
+```{r}
+rse <- expand_sra_attributes(rse)
+colData(rse)[
+    ,
+    grepl("^sra_attribute", colnames(colData(rse)))
+]
+```
+
+Se realiza un reasignacion a los atributos que lo necesiten
+```{r}
+rse$sra_attribute.source_name<- factor(rse$sra_attribute.source_name)
+rse$sra_attribute.cell_line<- factor(rse$sra_attribute.cell_line)
+rse$sra_attribute.transduced_construct<- factor(rse$sra_attribute.transduced_construct)
+
+```
+
+```{r}
+summary(as.data.frame(colData(rse)[
+    ,
+    grepl("^sra_attribute.[condition|source.name|cell_line|transduced_construct]", colnames(colData(rse)))
+]))
+```
+Las variables se creearan en base a la prescencia de POM121
+
+```{r}
+rse$POM121 <- factor(ifelse(rse$sra_attribute.condition == "Control", "Control", "Knockout"))
+table(rse$POM121)
+```
+
+### Control de calidad
+```{r}
+rse$assigned_gene_prop <- rse$recount_qc.gene_fc_count_all.assigned / rse$recount_qc.gene_fc_count_all.total
+summary(rse$assigned_gene_prop)
+
+```
+
+```{r}
+rse_unfiltered <- rse
+with(colData(rse), tapply(assigned_gene_prop, POM121 , summary))
+
+```
+
+### Eliminamos las muestras de mala calidad
+
+Se quitaran los más bajos que el primer quantil (0.62)
+```{r}
+table(rse$assigned_gene_prop < 0.62)
+```
+
+```{r}
+rse <- rse[, rse$assigned_gene_prop > 0.3]
+
+```
+ 
+### Niveles de expresión en las muestras
+```{r}
+gene_means <- rowMeans(assay(rse, "counts"))
+summary(gene_means)
+```
+Se quitaran los que esten en 0.0
+```{r}
+rse <- rse[gene_means > 0.0, ]
+
+```
+
+```{r}
+filtered_rse<-rse
+```
+
+Dimensiones finales:
+```{r}
+dim(rse)
+
+```
+El numero de muestras no se redujo, pero el numero de genes paso de  63856 a 43907.
+
+## Normalización de los datos
+Haciendo uso del paquete edgeR y limma
+
+```{r}
+library("limma")
+library("edgeR") # BiocManager::install("edgeR", update = FALSE)
+dge <- DGEList(
+    counts = assay(rse, "counts"),
+    genes = rowData(rse)
+)
+dge <- calcNormFactors(dge)
+
+```
+# Expresion diferencial
+
+```{r}
+library("ggplot2")
+ggplot(as.data.frame(colData(rse)), aes(y = assigned_gene_prop, x =POM121)) +
+    geom_boxplot() +
+    theme_bw(base_size = 20) +
+    ylab("Assigned Gene Prop") +
+    xlab("Grupo")
+```
+Acerca de las otras variables
+```{r}
+unique(rse$sra_attribute.cell_line)
+unique(rse$sra_attribute.transduced_construct)
+```
+
+
+## Modelo
+
+### Evalucion del modelo
+
+```{r}
+# if (interactive()) {
+#       ExploreModelMatrix::ExploreModelMatrix(
+#           colData(rse)[, c(
+#               "POM121", "assigned_gene_prop", "sra_attribute.cell_line","sra_attribute.transduced_construct"
+#           )],
+#          ~ POM121 + assigned_gene_prop +sra_attribute.cell_line
+#      )
+#  }
+```
+ 
+
+Las lineas anteriores su utilizaron para comprobar que el modelo no tuviera variables dependientes. al involucrar a la variable sra_attribute.transduced_construct el modelo no era full rank, por lo que fue omitida
+
+```{r}
+mod <- model.matrix(~ POM121 + assigned_gene_prop +sra_attribute.cell_line ,
+    data = colData(rse)
+)
+colnames(mod)
+```
+
+# Expresión diferencial
+```{r}
+vGene <- voom(dge, mod, plot = TRUE)
+```
+
+
+```{r}
+eb_results <- eBayes(lmFit(vGene))
+
+de_results <- topTable(
+    eb_results,
+    coef = 2,
+    number = nrow(rse),
+    sort.by = "none"
+)
+dim(de_results)
+```
+
+```{r}
+table(de_results$adj.P.Val < 0.05)
+indices<-de_results$adj.P.Val < 0.05
+indices<-which(indices,arr.ind = TRUE)
+```
+Con base en nuestro modelo 6516 genes tienen una expresión diferencial.
+```{r}
+NomGenes<-de_results$gene_name[indices]
+```
+
+En la siguiente grafica los 10 primeros genes con expresion diferencial estan resaltados
+```{r}
+volcanoplot(eb_results, coef = 2, highlight = 7, names = de_results$gene_name)
+
+```
+
+# Visualización
+
+se trabajara con los primero 20, para que la visualización sea adecuada
+```{r}
+exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 20, ]
+df <- as.data.frame(colData(rse)[, c("POM121","assigned_gene_prop","sra_attribute.cell_line")])
+colnames(df) <- c("Grupo","Calidad","Linea_celular")
+
+rownames(exprs_heatmap) <- rowRanges(rse)$gene_name[
+    match(rownames(exprs_heatmap), rowRanges(rse)$gene_id)
+]
+
+library("pheatmap")
+pheatmap(
+    exprs_heatmap,
+    cluster_rows = TRUE,
+    cluster_cols = TRUE,
+    show_rownames = TRUE,
+    show_colnames = FALSE,
+    annotation_col = df
+)
+```
+El heatmap muestra que loos genes estan separados principalmente por la linea celular a la que pertenecen y dentro de cada una de las lineas se separan por la preencia o ausencia de POM121.
+
+Además que esta grafica nos permite notar de manera clara que la calidad en la linea 22Rv1-DR es mucho menor que en la DU145-DR, lo que podría conllevar problemas.
+
+## Multidimentional scaling
+```{r}
+## Para colores
+library("RColorBrewer")
+
+## Conviertiendo los grupos a colores
+col.group <- df$Grupo
+levels(col.group) <- brewer.pal(nlevels(col.group), "Set1")
+```
+Recordando que el escalado multidimensional permite una representacion visual de los datos con base en su similitud.
+
+### MDS por grupos
+```{r}
+col.group <- as.character(col.group)
+
+plotMDS(vGene$E, labels = df$Grupo, col = col.group)
+```
+
+### MDS por linea celular
+```{r}
+plotMDS(vGene$E, labels = df$Linea_celular, col = col.group)
+```
+
+
+En este caso los grupos no tienen una separación clara a pesar de que el heatmap si la marca. 
+
+
+
+
+## Conclusiones
+
+
+
