@@ -193,11 +193,12 @@ indices<-which(indices,arr.ind = TRUE)
 Con base en nuestro modelo 6516 genes tienen una expresión diferencial.
 ```{r}
 NomGenes<-de_results$gene_name[indices]
+
 ```
 
 En la siguiente grafica los 10 primeros genes con expresion diferencial estan resaltados
 ```{r}
-volcanoplot(eb_results, coef = 2, highlight = 7, names = de_results$gene_name)
+volcanoplot(eb_results, coef = 2, highlight = 10, names = de_results$gene_name)
 
 ```
 
@@ -253,7 +254,18 @@ plotMDS(vGene$E, labels = df$Linea_celular, col = col.group)
 
 En este caso los grupos no tienen una separación clara a pesar de que el heatmap si la marca. 
 
+### Uso de iSEE
 
+```{r}
+# library("iSEE")
+# iSEE::iSEE(rse)
+```
+Se utilizaran los primeros 5 genes con el complex heatmap
+
+```{r}
+NomGenes[1:5]
+```
+Con iSEE se mantuvo el patron de separacion principalmente por las lineas celulares y despues por el knockout de POM121
 
 
 ## Conclusiones
